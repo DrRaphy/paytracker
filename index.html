@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pay Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap">
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<style>
+/* ─── PASTE YOUR FIREBASE CONFIG in the <script> below ─────────
+   Look for: const firebaseConfig = { ... }
+   ─────────────────────────────────────────────────────────────── */
+
+/* ── TOKENS ───────────────────────────────────────────────────── */
+:root {
+  --bg:          #0C0E18;
+  --surface:     #14172A;
+  --raised:      #1C2038;
+  --border:      #252946;
+  --border-soft: #1E2238;
+  --hit:         #3DDD7A;
+  --hit-bg:      #0D2B1A;
+  --miss:        #F04E4E;
+  --miss-bg:     #2A1212;
+  --accent:      #5B8AF5;
+  --text:        #E8ECFF;
+  --muted:       #6B738F;
+  --muted2:      #4A5070;
+  --agent1-hue:  #A78BFA;
+  --agent2-hue:  #38BDF8;
+  --num-font:    "DM Mono", monospace;
+  --ui-font:     "DM Sans", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:#F0F2FA; --surface:#FFFFFF; --raised:#F7F8FD; --border:#DDE1F0;
+    --border-soft:#EAEDF8; --hit:#16A34A; --hit-bg:#DCFCE7; --miss:#DC2626;
+    --miss-bg:#FEE2E2; --accent:#3B6FD4; --text:#0D1028; --muted:#5A617A;
+    --muted2:#9BA3C0; --agent1-hue:#7C3AED; --agent2-hue:#0284C7;
+  }
+}
+:root[data-theme="light"] {
+  --bg:#F0F2FA; --surface:#FFFFFF; --raised:#F7F8FD; --border:#DDE1F0;
+  --border-soft:#EAEDF8; --hit:#16A34A; --hit-bg:#DCFCE7; --miss:#DC2626;
+  --miss-bg:#FEE2E2; --accent:#3B6FD4; --text:#0D1028; --muted:#5A617A;
+  --muted2:#9BA3C0; --agent1-hue:#7C3AED; --agent2-hue:#0284C7;
+}
+
+/* ── RESET ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--ui-font); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+input, select, button { font-family: inherit; }
+button { cursor: pointer; border: none; outline: none; background: none; }
+
+/* ── SETUP BANNER ─────────────────────────────────────────────── */
+.setup-screen {
+  display: none;
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  align-items: center; justify-content: center;
+  padding: 24px;
+}
+.setup-screen.show { display: flex; }
+.setup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 560px;
+  width: 100%;
+}
+.setup-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.setup-sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+.setup-steps { display: flex; flex-direction: column; gap: 16px; margin-bottom: 28px; }
+.setup-step { display: flex; gap: 14px; align-items: flex-start; }
+.step-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step-body { font-size: 13px; line-height: 1.6; padding-top: 3px; }
+.step-body a { color: var(--accent); text-decoration: none; }
+.step-body a:hover { text-decoration: underline; }
+.step-body code {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px;
+  font-family: var(--num-font); font-size: 12px;
+}
+.setup-note {
+  background: color-mix(in srgb, var(--accent) 10%, var(--raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 8px; padding: 12px 14px;
+  font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+
+/* ── TOPBAR ───────────────────────────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 20px; display: flex; align-items: center; gap: 16px; height: 52px;
+}
+.topbar-brand { font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); white-space: nowrap; flex-shrink: 0; }
+.topbar-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
+.ctrl-group { display: flex; align-items: center; gap: 6px; }
+.ctrl-label { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.ctrl-input {
+  background: var(--raised); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 4px 8px; font-size: 13px; font-family: var(--num-font);
+  transition: border-color .15s;
+}
+.ctrl-input:focus { outline: none; border-color: var(--accent); }
+.ctrl-input.name-input { width: 90px; }
+.ctrl-input.num-input  { width: 72px; }
+.ctrl-input.month-select { width: 110px; }
+.ctrl-input.year-input { width: 62px; }
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.sync-pill { display: flex; align-items: center; gap: 5px; background: var(--raised); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted2); flex-shrink: 0; transition: background .3s; }
+.sync-dot.live   { background: var(--hit); }
+.sync-dot.saving { background: #F59E0B; }
+.sync-dot.error  { background: var(--miss); }
+.sync-label { font-size: 10px; font-weight: 500; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
+.theme-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--raised); border: 1px solid var(--border);
+  color: var(--muted); font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s;
+}
+.theme-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── PAGE ─────────────────────────────────────────────────────── */
+.page { max-width: 1280px; margin: 0 auto; padding: 24px 20px 40px; }
+.month-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.month-title { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.month-subtitle { font-family: var(--num-font); font-size: 12px; color: var(--muted); }
+
+/* ── TABLE ────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 720px; }
+thead { position: sticky; top: 52px; z-index: 10; }
+.thead-group th { padding: 10px 12px 8px; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.thead-agent1 { background: color-mix(in srgb, var(--agent1-hue) 12%, var(--surface)); color: var(--agent1-hue); border-right: 2px solid var(--border); text-align: center; }
+.thead-agent2 { background: color-mix(in srgb, var(--agent2-hue) 12%, var(--surface)); color: var(--agent2-hue); border-right: 2px solid var(--border); text-align: center; }
+.thead-status { background: var(--raised); color: var(--muted); text-align: center; }
+.thead-cols th { padding: 8px 10px; font-size: 10px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--raised); border-bottom: 2px solid var(--border); white-space: nowrap; }
+.thead-cols .col-date { background: var(--surface); text-align: left; padding-left: 14px; }
+.col-sep { border-right: 2px solid var(--border) !important; }
+tbody tr { border-bottom: 1px solid var(--border-soft); transition: background .1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--raised); }
+tbody tr.today-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+td { padding: 5px 10px; vertical-align: middle; }
+.td-date { font-family: var(--num-font); font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; padding-left: 14px; width: 70px; min-width: 60px; }
+.td-date.today { color: var(--accent); font-weight: 700; }
+.cell-input {
+  width: 100%; background: transparent; border: none; color: var(--text);
+  font-family: var(--num-font); font-size: 13px; text-align: right;
+  padding: 4px 6px; border-radius: 5px; transition: background .12s, outline .12s; min-width: 60px;
+}
+.cell-input:hover { background: var(--border-soft); }
+.cell-input:focus { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--raised)); }
+.cell-input::placeholder { color: var(--muted2); }
+.cell-computed { font-family: var(--num-font); font-size: 13px; text-align: right; padding: 4px 6px; color: var(--muted); }
+.td-status { text-align: center; width: 90px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.badge-hit  { background: var(--hit-bg);  color: var(--hit); }
+.badge-miss { background: var(--miss-bg); color: var(--miss); }
+.badge-empty { color: var(--muted2); font-size: 12px; }
+.td-combined { font-family: var(--num-font); font-size: 13px; font-weight: 600; text-align: right; padding: 4px 10px; color: var(--text); width: 80px; }
+tfoot tr { border-top: 2px solid var(--border); }
+tfoot td { padding: 10px; font-family: var(--num-font); font-size: 13px; font-weight: 500; background: var(--raised); color: var(--text); }
+tfoot .td-date { font-family: var(--ui-font); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+
+/* ── STATS ────────────────────────────────────────────────────── */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 20px; }
+.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+.stat-label { font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.stat-value { font-family: var(--num-font); font-size: 22px; font-weight: 500; color: var(--text); line-height: 1; }
+.stat-value.green { color: var(--hit); }
+.stat-value.red   { color: var(--miss); }
+.stat-value.blue  { color: var(--accent); }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--num-font); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN (shown if Firebase config is not filled in) -->
+<div class="setup-screen" id="setupScreen">
+  <div class="setup-card">
+    <div class="setup-title">🔧 Firebase Setup Required</div>
+    <div class="setup-sub">Open this file in a text editor and paste your Firebase config into the script block at the bottom. Here's how:</div>
+    <div class="setup-steps">
+      <div class="setup-step">
+        <div class="step-num">1</div>
+        <div class="step-body">Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → Create a project (name it anything)</div>
+      </div>
+      <div class="setup-step">
+        <div class="step-num">2</div>
+        <div class="step-body">In your project: <strong>Build → Realtime Database → Create database</strong> → choose any region → Start in <strong>test mode</strong></div>
+      </div>
+      <div class="setup-step">
+        <div class="step-num">3</div>
+        <div class="step-body">Go to <strong>Project Settings</strong> (gear icon) → <strong>Your apps</strong> → click <code>&lt;/&gt;</code> Web → Register app → copy the <code>firebaseConfig</code> object</div>
+      </div>
+      <div class="setup-step">
+        <div class="step-num">4</div>
+        <div class="step-body">Open <code>paytracker.html</code> in a text editor → find <code>const firebaseConfig = {</code> near the bottom → replace the placeholder values with your copied config</div>
+      </div>
+      <div class="setup-step">
+        <div class="step-num">5</div>
+        <div class="step-body">Save the file and re-open it — this screen will disappear and your tracker will be live</div>
+      </div>
+    </div>
+    <div class="setup-note">
+      💡 <strong>Test mode</strong> lets anyone with the URL read and write — perfect for sharing with your chatter. Your data is only accessible to people you share the link with.
+    </div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <span class="topbar-brand">Pay Tracker</span>
+  <div class="topbar-controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">Month</span>
+      <select class="ctrl-input month-select" id="monthSel"></select>
+      <input  class="ctrl-input year-input"  id="yearIn" type="number" min="2020" max="2099">
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Target $</span>
+      <input class="ctrl-input num-input" id="targetIn" type="number" min="0" step="0.01">
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">PHP/USD</span>
+      <input class="ctrl-input num-input" id="rateIn" type="number" min="1" step="0.01">
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Agent 1</span>
+      <input class="ctrl-input name-input" id="agent1Name" type="text" maxlength="16">
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Agent 2</span>
+      <input class="ctrl-input name-input" id="agent2Name" type="text" maxlength="16">
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="sync-pill">
+      <div class="sync-dot" id="syncDot"></div>
+      <span class="sync-label" id="syncLabel">Connecting…</span>
+    </div>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme">☀</button>
+  </div>
+</div>
+
+<!-- PAGE -->
+<div class="page">
+  <div class="month-heading">
+    <h1 class="month-title" id="monthTitle">—</h1>
+  </div>
+  <div class="table-wrap">
+    <table id="mainTable">
+      <thead>
+        <tr class="thead-group">
+          <th rowspan="2" class="td-date col-sep" style="background:var(--surface);color:var(--muted);font-size:10px;letter-spacing:.07em;text-transform:uppercase">Date</th>
+          <th colspan="4" class="thead-agent1 col-sep" id="th-agent1">AGENT 1</th>
+          <th colspan="4" class="thead-agent2 col-sep" id="th-agent2">AGENT 2</th>
+          <th class="thead-status" style="min-width:80px">Combined</th>
+          <th class="thead-status" style="min-width:80px">Status</th>
+        </tr>
+        <tr class="thead-cols">
+          <th>Revenue ($)</th><th>Total<br>Contacts</th><th>Paying<br>Contacts</th><th class="col-sep">Conv.%</th>
+          <th>Revenue ($)</th><th>Total<br>Contacts</th><th>Paying<br>Contacts</th><th class="col-sep">Conv.%</th>
+          <th></th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+      <tfoot id="tableFoot"></tfoot>
+    </table>
+  </div>
+  <div class="stats-row" id="statsRow"></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  STEP 4: PASTE YOUR FIREBASE CONFIG HERE
+//  Replace every value below with the ones from your Firebase project.
+// ════════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// ════════════════════════════════════════════════════════════════
+
+// ── CHECK CONFIG ─────────────────────────────────────────────────
+const isConfigured = !Object.values(firebaseConfig).some(v => v.startsWith("YOUR_"));
+if (!isConfigured) {
+  document.getElementById("setupScreen").classList.add("show");
+}
+
+// ── FIREBASE INIT ─────────────────────────────────────────────────
+let firebaseApp, db;
+if (isConfigured) {
+  firebaseApp = firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+}
+
+// ── CONSTANTS ─────────────────────────────────────────────────────
+const MONTHS   = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_ABBR = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const FIELDS   = ["a1Rev","a1Tot","a1Pay","a2Rev","a2Tot","a2Pay"];
+
+// ── STATE ─────────────────────────────────────────────────────────
+let settings = {
+  month:   new Date().getMonth(),
+  year:    new Date().getFullYear(),
+  target:  20,
+  phpRate: 60,
+  agent1:  "YUMI",
+  agent2:  "HANNA"
+};
+let dayData   = {};
+let focusedKey = null;
+const saveTimers = {};
+let currentMonthListener = null;
+
+// ── HELPERS ───────────────────────────────────────────────────────
+function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+function fmt$(n) {
+  if (n === null || n === undefined || n === "") return "";
+  const v = parseFloat(n); return isNaN(v) ? "" : "$" + v.toFixed(2);
+}
+function parseNum(s) { const v = parseFloat(s); return isNaN(v) ? null : v; }
+function monthDbKey() {
+  return "m" + settings.year + "-" + String(settings.month + 1).padStart(2, "0");
+}
+
+// ── SYNC STATUS ───────────────────────────────────────────────────
+function setSyncStatus(state) {
+  const dot = document.getElementById("syncDot");
+  const lbl = document.getElementById("syncLabel");
+  dot.className = "sync-dot " + state;
+  const labels = { live:"Live", saving:"Saving…", error:"Error", connecting:"Connecting…" };
+  lbl.textContent = labels[state] || "—";
+}
+
+// ── THEME ─────────────────────────────────────────────────────────
+let theme = "dark";
+try { theme = localStorage.getItem("pt_theme") || "dark"; } catch(e) {}
+function applyTheme(t) {
+  theme = t;
+  document.documentElement.setAttribute("data-theme", t);
+  document.getElementById("themeBtn").textContent = t === "dark" ? "☀" : "☾";
+  try { localStorage.setItem("pt_theme", t); } catch(e) {}
+}
+document.getElementById("themeBtn").addEventListener("click", () => applyTheme(theme === "dark" ? "light" : "dark"));
+
+// ── TOPBAR INIT ───────────────────────────────────────────────────
+function initTopbar() {
+  const ms = document.getElementById("monthSel");
+  MONTHS.forEach((m, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = m; ms.appendChild(o);
+  });
+  ms.value = settings.month;
+  document.getElementById("yearIn").value    = settings.year;
+  document.getElementById("targetIn").value  = settings.target;
+  document.getElementById("rateIn").value    = settings.phpRate;
+  document.getElementById("agent1Name").value = settings.agent1;
+  document.getElementById("agent2Name").value = settings.agent2;
+
+  ms.addEventListener("change", () => { settings.month = +ms.value; resubscribeMonth(); });
+  document.getElementById("yearIn").addEventListener("change", () => { settings.year = +document.getElementById("yearIn").value; resubscribeMonth(); });
+
+  function onSettingChange() { saveConfig(); renderTable(); }
+  document.getElementById("targetIn").addEventListener("change",   () => { settings.target  = parseFloat(document.getElementById("targetIn").value)  || 20; onSettingChange(); });
+  document.getElementById("rateIn").addEventListener("change",     () => { settings.phpRate  = parseFloat(document.getElementById("rateIn").value)    || 60; onSettingChange(); });
+  document.getElementById("agent1Name").addEventListener("change", () => { settings.agent1   = document.getElementById("agent1Name").value.trim() || "Agent 1"; onSettingChange(); });
+  document.getElementById("agent2Name").addEventListener("change", () => { settings.agent2   = document.getElementById("agent2Name").value.trim() || "Agent 2"; onSettingChange(); });
+}
+
+function updateAgentHeaders() {
+  document.getElementById("th-agent1").textContent = settings.agent1.toUpperCase();
+  document.getElementById("th-agent2").textContent = settings.agent2.toUpperCase();
+}
+
+// ── FIREBASE CONFIG ───────────────────────────────────────────────
+function saveConfig() {
+  if (!db) return;
+  setSyncStatus("saving");
+  db.ref("config").set({
+    target:  settings.target,
+    phpRate: settings.phpRate,
+    agent1:  settings.agent1,
+    agent2:  settings.agent2
+  }).then(() => setSyncStatus("live")).catch(() => setSyncStatus("error"));
+}
+
+function subscribeConfig() {
+  if (!db) return;
+  db.ref("config").on("value", snap => {
+    const d = snap.val();
+    if (!d) return;
+    let changed = false;
+    if (d.target  !== undefined && d.target  !== settings.target)  { settings.target  = d.target;  document.getElementById("targetIn").value  = settings.target; changed = true; }
+    if (d.phpRate !== undefined && d.phpRate !== settings.phpRate) { settings.phpRate = d.phpRate; document.getElementById("rateIn").value    = settings.phpRate; changed = true; }
+    if (d.agent1  !== undefined && d.agent1  !== settings.agent1)  { settings.agent1  = d.agent1;  document.getElementById("agent1Name").value = settings.agent1; }
+    if (d.agent2  !== undefined && d.agent2  !== settings.agent2)  { settings.agent2  = d.agent2;  document.getElementById("agent2Name").value = settings.agent2; }
+    updateAgentHeaders();
+    if (changed) renderStats(daysInMonth(settings.year, settings.month));
+  });
+}
+
+// ── MONTH SUBSCRIPTION ────────────────────────────────────────────
+function resubscribeMonth() {
+  if (!db) { renderTable(); return; }
+  // Remove previous listener
+  if (currentMonthListener) {
+    db.ref("months/" + currentMonthListener).off("value");
+    currentMonthListener = null;
+  }
+  dayData = {};
+  renderTable();
+
+  const key = monthDbKey();
+  currentMonthListener = key;
+  setSyncStatus("connecting");
+
+  db.ref("months/" + key).on("value", snap => {
+    dayData = snap.val() || {};
+    renderTable();
+    setSyncStatus("live");
+  }, () => setSyncStatus("error"));
+}
+
+// ── SAVE A CELL ───────────────────────────────────────────────────
+function saveDayField(day, field, value) {
+  const key = String(day);
+  // Optimistic local update
+  if (!dayData[key]) dayData[key] = {};
+  if (value === null) {
+    delete dayData[key][field];
+    if (Object.keys(dayData[key]).length === 0) delete dayData[key];
+  } else {
+    dayData[key][field] = value;
+  }
+
+  if (!db) return;
+  setSyncStatus("saving");
+  clearTimeout(saveTimers[key + field]);
+  saveTimers[key + field] = setTimeout(() => {
+    const row = dayData[key];
+    const ref  = db.ref("months/" + monthDbKey() + "/" + key);
+    const p = row && Object.keys(row).length > 0 ? ref.set(row) : ref.remove();
+    p.then(() => setSyncStatus("live")).catch(() => setSyncStatus("error"));
+  }, 600);
+}
+
+// ── RENDER TABLE ──────────────────────────────────────────────────
+function renderTable() {
+  updateAgentHeaders();
+  document.getElementById("monthTitle").textContent = MONTHS[settings.month] + " " + settings.year;
+
+  const days     = daysInMonth(settings.year, settings.month);
+  const today    = new Date();
+  const isCurMon = today.getFullYear() === settings.year && today.getMonth() === settings.month;
+  const tbody    = document.getElementById("tableBody");
+
+  // Build index of existing rows
+  const existing = {};
+  tbody.querySelectorAll("tr[data-day]").forEach(r => existing[r.dataset.day] = r);
+
+  for (let d = 1; d <= days; d++) {
+    const key = String(d);
+    const row = dayData[key] || {};
+    const isToday = isCurMon && today.getDate() === d;
+
+    let tr = existing[key];
+    if (!tr) {
+      tr = buildRow(d, DAY_ABBR[new Date(settings.year, settings.month, d).getDay()], isToday);
+      tbody.appendChild(tr);
+    }
+    tr.classList.toggle("today-row", isToday);
+
+    // Update input values (skip focused)
+    FIELDS.forEach(f => {
+      const inp = tr.querySelector(`[data-field="${f}"]`);
+      if (!inp || focusedKey === d + "-" + f) return;
+      inp.value = (row[f] !== undefined && row[f] !== null) ? row[f] : "";
+    });
+
+    // Conv Rate cells
+    setConvCell(tr, "a1", row.a1Pay, row.a1Tot);
+    setConvCell(tr, "a2", row.a2Pay, row.a2Tot);
+
+    // Combined + Status
+    const a1 = parseNum(row.a1Rev) || 0;
+    const a2 = parseNum(row.a2Rev) || 0;
+    const combined = a1 + a2;
+    const hasEntry = FIELDS.some(f => row[f] !== undefined && row[f] !== null);
+
+    tr.querySelector(".td-combined").textContent = hasEntry ? (fmt$(combined) || "$0.00") : "";
+    const statusTd = tr.querySelector(".td-status");
+    if (hasEntry) {
+      statusTd.innerHTML = combined >= settings.target
+        ? `<span class="badge badge-hit">▲ Hit</span>`
+        : `<span class="badge badge-miss">▼ Miss</span>`;
+    } else {
+      statusTd.innerHTML = `<span class="badge-empty">—</span>`;
+    }
+  }
+
+  // Remove stale rows
+  Object.keys(existing).forEach(k => { if (+k > days) existing[k].remove(); });
+
+  renderFoot(days);
+  renderStats(days);
+}
+
+function buildRow(d, dow, isToday) {
+  const tr = document.createElement("tr");
+  tr.dataset.day = d;
+  if (isToday) tr.classList.add("today-row");
+
+  const dtd = document.createElement("td");
+  dtd.className = "td-date col-sep" + (isToday ? " today" : "");
+  dtd.innerHTML = `<span style="color:var(--muted2);font-size:10px;margin-right:4px">${dow}</span>${MONTHS[settings.month].slice(0,3)} ${d}`;
+  tr.appendChild(dtd);
+
+  tr.appendChild(makeCell(d, "a1Rev", "$"));
+  tr.appendChild(makeCell(d, "a1Tot", "#"));
+  tr.appendChild(makeCell(d, "a1Pay", "#"));
+  const c1 = document.createElement("td"); c1.className = "cell-computed col-sep a1-conv"; tr.appendChild(c1);
+
+  tr.appendChild(makeCell(d, "a2Rev", "$"));
+  tr.appendChild(makeCell(d, "a2Tot", "#"));
+  tr.appendChild(makeCell(d, "a2Pay", "#"));
+  const c2 = document.createElement("td"); c2.className = "cell-computed col-sep a2-conv"; tr.appendChild(c2);
+
+  const comb = document.createElement("td"); comb.className = "td-combined"; tr.appendChild(comb);
+  const stat = document.createElement("td"); stat.className = "td-status"; stat.innerHTML = `<span class="badge-empty">—</span>`; tr.appendChild(stat);
+
+  return tr;
+}
+
+function makeCell(day, field, prefix) {
+  const td = document.createElement("td");
+  const inp = document.createElement("input");
+  inp.type = "number"; inp.min = "0"; inp.step = prefix === "$" ? "0.01" : "1";
+  inp.className = "cell-input"; inp.placeholder = "—"; inp.dataset.field = field;
+  inp.addEventListener("focus", () => { focusedKey = day + "-" + field; });
+  inp.addEventListener("blur",  () => { if (focusedKey === day + "-" + field) focusedKey = null; });
+  inp.addEventListener("input", () => {
+    const v = inp.value.trim() === "" ? null : parseNum(inp.value);
+    saveDayField(day, field, v);
+  });
+  td.appendChild(inp);
+  return td;
+}
+
+function setConvCell(tr, agent, pay, tot) {
+  const td = tr.querySelector("." + agent + "-conv");
+  if (!td) return;
+  const p = parseNum(pay), t = parseNum(tot);
+  td.textContent = (p !== null && t !== null && t > 0) ? (p / t * 100).toFixed(1) + "%" : "";
+}
+
+// ── FOOTER ────────────────────────────────────────────────────────
+function renderFoot(days) {
+  const tfoot = document.getElementById("tableFoot");
+  tfoot.innerHTML = "";
+  let a1Rev=0,a2Rev=0,a1Tot=0,a2Tot=0,a1Pay=0,a2Pay=0;
+  for (let d = 1; d <= days; d++) {
+    const r = dayData[String(d)] || {};
+    a1Rev += parseNum(r.a1Rev)||0; a2Rev += parseNum(r.a2Rev)||0;
+    a1Tot += parseNum(r.a1Tot)||0; a2Tot += parseNum(r.a2Tot)||0;
+    a1Pay += parseNum(r.a1Pay)||0; a2Pay += parseNum(r.a2Pay)||0;
+  }
+  const combined = a1Rev + a2Rev;
+  const a1Conv = a1Tot > 0 ? (a1Pay/a1Tot*100).toFixed(1)+"%" : "—";
+  const a2Conv = a2Tot > 0 ? (a2Pay/a2Tot*100).toFixed(1)+"%" : "—";
+
+  function ftd(txt, align="right", bold=false) {
+    const td = document.createElement("td");
+    td.textContent = txt; td.style.textAlign = align;
+    if (bold) td.style.fontWeight = "700";
+    return td;
+  }
+  const tr = document.createElement("tr");
+  const dtd = ftd("MONTH TOTAL","left"); dtd.className = "td-date col-sep"; tr.appendChild(dtd);
+  tr.appendChild(ftd(a1Rev > 0 ? fmt$(a1Rev) : "—"));
+  tr.appendChild(ftd(a1Tot || "—"));
+  tr.appendChild(ftd(a1Pay || "—"));
+  const ca1 = ftd(a1Conv); ca1.className = "col-sep"; tr.appendChild(ca1);
+  tr.appendChild(ftd(a2Rev > 0 ? fmt$(a2Rev) : "—"));
+  tr.appendChild(ftd(a2Tot || "—"));
+  tr.appendChild(ftd(a2Pay || "—"));
+  const ca2 = ftd(a2Conv); ca2.className = "col-sep"; tr.appendChild(ca2);
+  const ct = ftd(combined > 0 ? fmt$(combined) : "—","right",true); ct.style.color = "var(--text)"; tr.appendChild(ct);
+  tr.appendChild(ftd(""));
+  tfoot.appendChild(tr);
+}
+
+// ── STATS ──────────────────────────────────────────────────────────
+function renderStats(days) {
+  const el = document.getElementById("statsRow");
+  el.innerHTML = "";
+  let a1Rev=0,a2Rev=0,hitDays=0,zeroDays=0,activeDays=0;
+  for (let d = 1; d <= days; d++) {
+    const r = dayData[String(d)] || {};
+    const hasEntry = FIELDS.some(f => r[f] !== undefined && r[f] !== null);
+    if (!hasEntry) continue;
+    activeDays++;
+    const a1 = parseNum(r.a1Rev)||0, a2 = parseNum(r.a2Rev)||0;
+    a1Rev += a1; a2Rev += a2;
+    if (a1+a2 >= settings.target) hitDays++;
+    if (a1+a2 === 0) zeroDays++;
+  }
+  const totalRev = a1Rev + a2Rev;
+  const dailyAvg = activeDays > 0 ? totalRev / activeDays : 0;
+  const phpEarned = Math.round(totalRev * settings.phpRate);
+
+  [
+    { label:"Combined Revenue", value: fmt$(totalRev)||"$0.00", sub:`${settings.agent1} ${fmt$(a1Rev)||"$0"} · ${settings.agent2} ${fmt$(a2Rev)||"$0"}`, cls:"blue" },
+    { label:"Days Target Hit",  value: hitDays, sub:`of ${activeDays} active day${activeDays!==1?"s":""}`, cls:hitDays>0?"green":"" },
+    { label:"Zero-Revenue Days",value: zeroDays, sub:"days with $0 combined", cls:zeroDays>0?"red":"" },
+    { label:"Daily Average",    value: fmt$(dailyAvg)||"$0.00", sub:`over ${activeDays} day${activeDays!==1?"s":""}`, cls:"" },
+    { label:"PHP Earned",       value: phpEarned>0?"₱"+phpEarned.toLocaleString():"₱0", sub:`at ₱${settings.phpRate}/USD`, cls:"green" },
+    { label:"Daily Target",     value: fmt$(settings.target), sub:"combined threshold", cls:"" },
+  ].forEach(t => {
+    const div = document.createElement("div");
+    div.className = "stat-tile";
+    div.innerHTML = `<div class="stat-label">${t.label}</div><div class="stat-value ${t.cls}">${t.value}</div><div class="stat-sub">${t.sub}</div>`;
+    el.appendChild(div);
+  });
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────
+applyTheme(theme);
+initTopbar();
+renderTable();
+
+if (isConfigured) {
+  subscribeConfig();
+  resubscribeMonth();
+} else {
+  setSyncStatus("error");
+}
+</script>
+</body>
+</html>
