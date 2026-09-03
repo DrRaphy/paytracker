@@ -16,6 +16,9 @@
    Look for: const firebaseConfig = { ... }
    ─────────────────────────────────────────────────────────────── */
 
+/* ── SCROLL PADDING (accounts for sticky topbar + thead) ──────── */
+html { scroll-padding-top: 140px; }
+
 /* ── TOKENS ───────────────────────────────────────────────────── */
 :root {
   --bg:          #0C0E18;
@@ -297,13 +300,14 @@ tfoot .td-date { font-family: var(--ui-font); font-size: 11px; font-weight: 700;
 //  Replace every value below with the ones from your Firebase project.
 // ════════════════════════════════════════════════════════════════
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyDnBv9CZ_7F11jHWGOY9j2d3bp0rjSpjL4",
+  authDomain:        "ai-paytracker.firebaseapp.com",
+  databaseURL:       "https://ai-paytracker-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "ai-paytracker",
+  storageBucket:     "ai-paytracker.firebasestorage.app",
+  messagingSenderId: "213767424790",
+  appId:             "1:213767424790:web:40e572de456a0d549fde37",
+  measurementId:     "G-KR2M3BS1DW"
 };
 // ════════════════════════════════════════════════════════════════
 
@@ -654,6 +658,7 @@ function renderStats(days) {
 applyTheme(theme);
 initTopbar();
 renderTable();
+window.scrollTo(0, 0);
 
 if (isConfigured) {
   subscribeConfig();
