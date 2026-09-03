@@ -388,8 +388,8 @@ function initTopbar() {
   document.getElementById("agent1Name").value = settings.agent1;
   document.getElementById("agent2Name").value = settings.agent2;
 
-  ms.addEventListener("change", () => { settings.month = +ms.value; resubscribeMonth(); });
-  document.getElementById("yearIn").addEventListener("change", () => { settings.year = +document.getElementById("yearIn").value; resubscribeMonth(); });
+  ms.addEventListener("change", () => { settings.month = +ms.value; resubscribeMonth(); window.scrollTo(0, 0); });
+  document.getElementById("yearIn").addEventListener("change", () => { settings.year = +document.getElementById("yearIn").value; resubscribeMonth(); window.scrollTo(0, 0); });
 
   function onSettingChange() { saveConfig(); renderTable(); }
   document.getElementById("targetIn").addEventListener("change",   () => { settings.target  = parseFloat(document.getElementById("targetIn").value)  || 20; onSettingChange(); });
@@ -445,10 +445,12 @@ function resubscribeMonth() {
   currentMonthListener = key;
   setSyncStatus("connecting");
 
+  let firstLoad = true;
   db.ref("months/" + key).on("value", snap => {
     dayData = snap.val() || {};
     renderTable();
     setSyncStatus("live");
+    if (firstLoad) { firstLoad = false; window.scrollTo(0, 0); }
   }, () => setSyncStatus("error"));
 }
 
@@ -485,26 +487,24 @@ function renderTable() {
   const isCurMon = today.getFullYear() === settings.year && today.getMonth() === settings.month;
   const tbody    = document.getElementById("tableBody");
 
-  // Build index of existing rows
-  const existing = {};
-  tbody.querySelectorAll("tr[data-day]").forEach(r => existing[r.dataset.day] = r);
+  // Always rebuild rows so date labels stay correct when switching months
+  tbody.innerHTML = "";
 
   for (let d = 1; d <= days; d++) {
     const key = String(d);
     const row = dayData[key] || {};
     const isToday = isCurMon && today.getDate() === d;
+    const dow = DAY_ABBR[new Date(settings.year, settings.month, d).getDay()];
 
-    let tr = existing[key];
-    if (!tr) {
-      tr = buildRow(d, DAY_ABBR[new Date(settings.year, settings.month, d).getDay()], isToday);
-      tbody.appendChild(tr);
-    }
+    const tr = buildRow(d, dow, isToday);
+    tbody.appendChild(tr);
+
     tr.classList.toggle("today-row", isToday);
 
-    // Update input values (skip focused)
+    // Set input values
     FIELDS.forEach(f => {
       const inp = tr.querySelector(`[data-field="${f}"]`);
-      if (!inp || focusedKey === d + "-" + f) return;
+      if (!inp) return;
       inp.value = (row[f] !== undefined && row[f] !== null) ? row[f] : "";
     });
 
@@ -528,9 +528,6 @@ function renderTable() {
       statusTd.innerHTML = `<span class="badge-empty">—</span>`;
     }
   }
-
-  // Remove stale rows
-  Object.keys(existing).forEach(k => { if (+k > days) existing[k].remove(); });
 
   renderFoot(days);
   renderStats(days);
