@@ -16,9 +16,6 @@
    Look for: const firebaseConfig = { ... }
    ─────────────────────────────────────────────────────────────── */
 
-/* ── SCROLL PADDING (accounts for sticky topbar + thead) ──────── */
-html { scroll-padding-top: 140px; }
-
 /* ── TOKENS ───────────────────────────────────────────────────── */
 :root {
   --bg:          #0C0E18;
@@ -145,9 +142,9 @@ button { cursor: pointer; border: none; outline: none; background: none; }
 .month-subtitle { font-family: var(--num-font); font-size: 12px; color: var(--muted); }
 
 /* ── TABLE ────────────────────────────────────────────────────── */
-.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.table-wrap { overflow: auto; max-height: calc(100vh - 130px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 720px; }
-thead { position: sticky; top: 52px; z-index: 10; }
+thead { position: sticky; top: 0; z-index: 10; }
 .thead-group th { padding: 10px 12px 8px; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
 .thead-agent1 { background: color-mix(in srgb, var(--agent1-hue) 12%, var(--surface)); color: var(--agent1-hue); border-right: 2px solid var(--border); text-align: center; }
 .thead-agent2 { background: color-mix(in srgb, var(--agent2-hue) 12%, var(--surface)); color: var(--agent2-hue); border-right: 2px solid var(--border); text-align: center; }
@@ -388,8 +385,8 @@ function initTopbar() {
   document.getElementById("agent1Name").value = settings.agent1;
   document.getElementById("agent2Name").value = settings.agent2;
 
-  ms.addEventListener("change", () => { settings.month = +ms.value; resubscribeMonth(); window.scrollTo(0, 0); });
-  document.getElementById("yearIn").addEventListener("change", () => { settings.year = +document.getElementById("yearIn").value; resubscribeMonth(); window.scrollTo(0, 0); });
+  ms.addEventListener("change", () => { settings.month = +ms.value; resubscribeMonth(); });
+  document.getElementById("yearIn").addEventListener("change", () => { settings.year = +document.getElementById("yearIn").value; resubscribeMonth(); });
 
   function onSettingChange() { saveConfig(); renderTable(); }
   document.getElementById("targetIn").addEventListener("change",   () => { settings.target  = parseFloat(document.getElementById("targetIn").value)  || 20; onSettingChange(); });
@@ -445,12 +442,10 @@ function resubscribeMonth() {
   currentMonthListener = key;
   setSyncStatus("connecting");
 
-  let firstLoad = true;
   db.ref("months/" + key).on("value", snap => {
     dayData = snap.val() || {};
     renderTable();
     setSyncStatus("live");
-    if (firstLoad) { firstLoad = false; window.scrollTo(0, 0); }
   }, () => setSyncStatus("error"));
 }
 
@@ -655,7 +650,6 @@ function renderStats(days) {
 applyTheme(theme);
 initTopbar();
 renderTable();
-window.scrollTo(0, 0);
 
 if (isConfigured) {
   subscribeConfig();
